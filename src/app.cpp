@@ -1,3 +1,7 @@
+//disclaimer: this is my first project in alia. i'm pretty sure that a lot of things aren't written the way developers of this library intended
+//            e.g. i couldn't pack Lesson struct into signal, so i just use it as a raw value. 
+//            "if it works, it works" is a sentiment present in most of this program, 
+//            so if you for some reason want to learn alia(or anything) from this repo, i would advise you to reconsider.
 #include <alia/html.hpp>
 #include <alia/html/bootstrap/dropdowns.hpp>
 #include <string>
@@ -7,8 +11,8 @@
 using namespace alia;
 using namespace html;
 
-struct Lesson
-{
+
+struct Lesson {
     int key;
     std::string name;
     int hour, minute;
@@ -26,22 +30,24 @@ struct Lesson
 
 };
 
+struct {
+    bool operator()(Lesson a, Lesson b) const { return a.key < b.key; }
+} lessonKeyLess;
 
-std::map<std::string, std::vector<Lesson>> lessons = 
-    {
-        {"Poniedziałek",{{1, "Matma", 12, 5},
-                        {2, "Polski", 12, 50},
-                        {3, "Wf", 12, 5},
-                        {4, "Ang", 12, 50},
-                        {5, "Niem", 12, 5},
-                        {6, "Inf", 12, 50}}
-        },
-        {"Wtorek",{}},
-        {"Środa",{}},
-        {"Czwartek",{}},
-        {"Piątek",{}}
-    }
-    ;
+
+std::map<std::string, std::vector<Lesson>> lessons = {
+    {"Poniedziałek",{{1, "Matma", 12, 5},
+                    {2, "Polski", 12, 50},
+                    {3, "Wf", 12, 5},
+                    {4, "Ang", 12, 50},
+                    {5, "Niem", 12, 5},
+                    {6, "Inf", 12, 50}}
+    },
+    {"Wtorek",{}},
+    {"Środa",{}},
+    {"Czwartek",{}},
+    {"Piątek",{}}
+};
 
 void
 odliczanie(html::context ctx, Lesson processed_lesson, std::string day_of_the_week){
@@ -54,11 +60,13 @@ odliczanie(html::context ctx, Lesson processed_lesson, std::string day_of_the_we
     auto delete_lesson = alia::callback([&]() { 
         auto itr = std::remove_if(lessons[day_of_the_week].begin(),lessons[day_of_the_week].end(), [&](Lesson a){return a == processed_lesson;});
         lessons[day_of_the_week].erase(itr,lessons[day_of_the_week].end());
-
     });
 
     auto edit_lesson = alia::callback(
-    [&](int n_key, std::string n_name, int n_hour, int n_minute) {std::replace(lessons[day_of_the_week].begin(), lessons[day_of_the_week].end(), processed_lesson, Lesson(n_key, n_name, n_hour, n_minute));});
+    [&](int n_key, std::string n_name, int n_hour, int n_minute) {
+        std::replace(lessons[day_of_the_week].begin(), lessons[day_of_the_week].end(), processed_lesson, Lesson(n_key, n_name, n_hour, n_minute));
+        std::sort(lessons[day_of_the_week].begin(), lessons[day_of_the_week].end(), lessonKeyLess);
+    });
 
     std::string formatted_minute = std::to_string(processed_lesson.minute).length()<2 ? ("0" + std::to_string(processed_lesson.minute)) : std::to_string(processed_lesson.minute);
     
@@ -85,7 +93,7 @@ odliczanie(html::context ctx, Lesson processed_lesson, std::string day_of_the_we
             html::input(ctx, new_hour);
             html::p(ctx, "Minute");
             html::input(ctx, new_minute);
-            html::button(ctx, "Edit lesson", edit_lesson << new_key.read() << new_name.read() << new_hour.read() << new_minute.read()
+            html::button(ctx, "Edit lesson",
                 (
                     edit_lesson << alia::mask(new_key.read(), new_key > 0) 
                                 << alia::mask(new_name.read(), !new_name.read().empty()) 
@@ -94,7 +102,7 @@ odliczanie(html::context ctx, Lesson processed_lesson, std::string day_of_the_we
                     new_key <<= 0,
                     new_name <<= "",
                     new_hour <<= 0,
-                    new_minute <<= 0,
+                    new_minute <<= 0
                 )
             );
         });
@@ -104,7 +112,7 @@ odliczanie(html::context ctx, Lesson processed_lesson, std::string day_of_the_we
     });
 }
 
-// Here's the main UI function for our app.
+
 void
 app_ui(html::context ctx)
 {
@@ -116,7 +124,10 @@ app_ui(html::context ctx)
     auto new_minute = get_state(ctx, empty<int>());
 
     auto add_lesson = alia::callback(
-    [&](int n_key, std::string n_name, int n_hour, int n_minute, std::string day_of_the_week) { lessons[day_of_the_week].push_back(Lesson(n_key, n_name, n_hour, n_minute)); });
+    [&](int n_key, std::string n_name, int n_hour, int n_minute, std::string day_of_the_week) {
+        lessons[day_of_the_week].push_back(Lesson(n_key, n_name, n_hour, n_minute)); 
+        std::sort(lessons[day_of_the_week].begin(), lessons[day_of_the_week].end(), lessonKeyLess);
+    });
 
     document_title(ctx, "Timetable");
 
