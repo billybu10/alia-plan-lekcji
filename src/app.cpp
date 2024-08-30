@@ -8,6 +8,7 @@
 #include <vector>
 #include <chrono>
 #include <ctime>
+#include <cmath>
 #include <ranges>
 
 #define MONDAY "Monday"
@@ -24,7 +25,8 @@
 #define ADD_LESSON "Add lesson"
 #define TIMETABLE "Timetable"
 #define WEEKDAY "Weekday"
-#define WEEKDAY_COLON "Weekday: "
+#define TIME_LEFT " Time left: "
+#define LESSON_ALREADY_BEGAN " Lessson already began. See you next week!"
 
 using namespace alia;
 using namespace html;
@@ -73,7 +75,14 @@ std::string
 time_left(int x, Lesson processed_lesson, std::string day_of_the_week){
     auto now = std::chrono::system_clock::now();
     auto t_c = std::chrono::system_clock::to_time_t(now);
-    return std::to_string(weekday_to_number[day_of_the_week]*24*3600 + processed_lesson.hour * 3600 + processed_lesson.minute * 60);
+    struct tm * date = localtime(&t_c);
+    int difference = (weekday_to_number[day_of_the_week] * 24 * 3600 + processed_lesson.hour * 3600 + processed_lesson.minute * 60) - (date -> tm_wday * 24 * 3600 + date -> tm_hour * 3600 + date -> tm_min * 60 + date -> tm_sec);
+    int days_left = std::floor(difference / (24*3600));
+    int hours_left = std::floor((difference - (days_left * 24 * 3600)) / 3600);
+    int minutes_left = std::floor(((difference - days_left * 24 * 3600) - hours_left * 3600 ) / 60);
+    int seconds_left = std::floor(((difference - days_left * 24 * 3600) - hours_left * 3600 ) - minutes_left * 60);
+    std::string message = difference < 0 ? LESSON_ALREADY_BEGAN :  TIME_LEFT + ::to_string(days_left) + ":" + std::to_string(hours_left) + ":" + std::to_string(minutes_left) + ":" + std::to_string(seconds_left);
+    return message;
 }
 
 void
@@ -87,12 +96,14 @@ present_lesson(html::context ctx, Lesson processed_lesson, std::string day_of_th
     auto delete_lesson = alia::callback([&]() { 
         auto itr = std::remove_if(lessons[day_of_the_week].begin(),lessons[day_of_the_week].end(), [&](Lesson a){return a == processed_lesson;});
         lessons[day_of_the_week].erase(itr,lessons[day_of_the_week].end());
+        //TODO: SAVE
     });
 
     auto edit_lesson = alia::callback(
     [&](int n_key, std::string n_name, int n_hour, int n_minute) {
         std::replace(lessons[day_of_the_week].begin(), lessons[day_of_the_week].end(), processed_lesson, Lesson(n_key, n_name, n_hour, n_minute));
         std::sort(lessons[day_of_the_week].begin(), lessons[day_of_the_week].end(), lesson_by_key_less_operator);
+        //TODO: SAVE
     });
 
     std::string formatted_minute = std::to_string(processed_lesson.minute).length()<2 ? ("0" + std::to_string(processed_lesson.minute)) : std::to_string(processed_lesson.minute);
@@ -126,11 +137,11 @@ present_lesson(html::context ctx, Lesson processed_lesson, std::string day_of_th
                     edit_lesson << alia::mask(new_key.read(), new_key > 0) 
                                 << alia::mask(new_name.read(), !new_name.read().empty()) 
                                 << alia::mask(new_hour.read(), new_hour > 0 && new_hour <= 24) 
-                                << alia::mask(new_minute.read(), new_minute > 0 && new_minute < 60),
+                                << alia::mask(new_minute.read(), (new_minute > -1 && new_minute < 60) || new_minute == 0),
                     new_key <<= 0,
                     new_name <<= "",
                     new_hour <<= 0,
-                    new_minute <<= 0
+                    new_minute <<= -1
                 )
             );
         });
@@ -150,11 +161,14 @@ app_ui(html::context ctx)
     auto new_name = get_state(ctx, std::string());
     auto new_hour = get_state(ctx, empty<int>());
     auto new_minute = get_state(ctx, empty<int>());
+    //TODO: states
+    //TODO: read
 
     auto add_lesson = alia::callback(
     [&](int n_key, std::string n_name, int n_hour, int n_minute, std::string day_of_the_week) {
         lessons[day_of_the_week].push_back(Lesson(n_key, n_name, n_hour, n_minute)); 
         std::sort(lessons[day_of_the_week].begin(), lessons[day_of_the_week].end(), lesson_by_key_less_operator);
+        //TODO: SAVE
     });
 
     document_title(ctx, TIMETABLE);
@@ -167,12 +181,13 @@ app_ui(html::context ctx)
             menu.option(THURSDAY, active_weekday <<= THURSDAY);
             menu.option(FRIDAY, active_weekday <<= FRIDAY);
         });
+        html::text(ctx, " " + active_weekday);
         alia::for_each(ctx, lessons[active_weekday.read()],
         [&](auto each_lesson) {
             present_lesson(ctx, each_lesson, active_weekday.read());
         });
 
-        html::p(ctx, WEEKDAY_COLON);
+        html::p(ctx, "\n");
         alia::html::bootstrap::dropdown_button(ctx, "btn-primary", WEEKDAY, [&](auto& menu) {
             menu.option(MONDAY, new_weekday <<= MONDAY);
             menu.option(TUESDAY, new_weekday <<= TUESDAY);
@@ -180,6 +195,7 @@ app_ui(html::context ctx)
             menu.option(THURSDAY, new_weekday <<= THURSDAY);
             menu.option(FRIDAY, new_weekday <<= FRIDAY);
         });
+        html::text(ctx, " " + new_weekday);
         html::p(ctx, KEY);
         html::input(ctx, new_key);
         html::p(ctx, NAME);
@@ -193,12 +209,12 @@ app_ui(html::context ctx)
                 add_lesson << alia::mask(new_key.read(), new_key > 0) 
                             << alia::mask(new_name.read(), !new_name.read().empty()) 
                             << alia::mask(new_hour.read(), new_hour > 0 && new_hour <= 24) 
-                            << alia::mask(new_minute.read(), new_minute > 0 && new_minute < 60) 
+                            << alia::mask(new_minute.read(), new_minute >= 0 && new_minute < 60) 
                             << new_weekday.read(),
                 new_key <<= 0,
                 new_name <<= "",
                 new_hour <<= 0,
-                new_minute <<= 0,
+                new_minute <<= -1,
                 new_weekday <<= MONDAY
             )
         );
