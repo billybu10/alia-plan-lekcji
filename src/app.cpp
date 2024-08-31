@@ -4,6 +4,7 @@
 //            so if you for some reason want to learn alia(or anything) from this repo, i would advise you to reconsider.
 #include <alia/html.hpp>
 #include <alia/html/bootstrap/dropdowns.hpp>
+#include "nlohmann/json.hpp"
 #include <string>
 #include <vector>
 #include <chrono>
@@ -26,7 +27,7 @@
 #define TIMETABLE "Timetable"
 #define WEEKDAY "Weekday"
 #define TIME_LEFT " Time left: "
-#define LESSON_ALREADY_BEGAN " Lessson already began. See you next week!"
+#define LESSON_ALREADY_BEGAN " Lesson already began. See you next week!"
 
 using namespace alia;
 using namespace html;
@@ -37,6 +38,7 @@ struct Lesson {
     std::string name;
     int hour, minute;
 
+    Lesson(){}
     Lesson(int n_key, std::string n_name, int n_hour, int n_minute) : key(n_key), name(n_name), hour(n_hour), minute(n_minute){}
 
     bool  isEqual(const Lesson& l) const{
@@ -49,6 +51,22 @@ struct Lesson {
     }
 
 };
+
+void from_json(const nlohmann::json& j, Lesson& val)
+{
+    j.at("key").get_to(val.key);
+    j.at("name").get_to(val.name);
+    j.at("hour").get_to(val.hour);
+    j.at("minute").get_to(val.minute);
+}
+
+void to_json(nlohmann::json& j, const Lesson& val)
+{
+    j["key"] = val.key;
+    j["name"] = val.name;
+    j["hour"] = val.hour;
+    j["minute"] = val.minute;
+}
 
 struct {
     bool operator()(Lesson a, Lesson b) const { return a.key < b.key; }
@@ -86,7 +104,7 @@ time_left(int x, Lesson processed_lesson, std::string day_of_the_week){
 }
 
 void
-present_lesson(html::context ctx, Lesson processed_lesson, std::string day_of_the_week){
+present_lesson(html::context ctx, Lesson processed_lesson, std::string day_of_the_week, storage_signal timetable){
     auto is_edit_open = get_state(ctx, false);
     auto new_key = get_state(ctx, processed_lesson.key);
     auto new_name = get_state(ctx, processed_lesson.name);
@@ -96,14 +114,20 @@ present_lesson(html::context ctx, Lesson processed_lesson, std::string day_of_th
     auto delete_lesson = alia::callback([&]() { 
         auto itr = std::remove_if(lessons[day_of_the_week].begin(),lessons[day_of_the_week].end(), [&](Lesson a){return a == processed_lesson;});
         lessons[day_of_the_week].erase(itr,lessons[day_of_the_week].end());
-        //TODO: SAVE
+        std::stringstream ss;
+        nlohmann::json j = lessons;
+        ss << std::setw(4) << j;
+        timetable.write(ss.str());
     });
 
     auto edit_lesson = alia::callback(
     [&](int n_key, std::string n_name, int n_hour, int n_minute) {
         std::replace(lessons[day_of_the_week].begin(), lessons[day_of_the_week].end(), processed_lesson, Lesson(n_key, n_name, n_hour, n_minute));
         std::sort(lessons[day_of_the_week].begin(), lessons[day_of_the_week].end(), lesson_by_key_less_operator);
-        //TODO: SAVE
+        std::stringstream ss;
+        nlohmann::json j = lessons;
+        ss << std::setw(4) << j;
+        timetable.write(ss.str());
     });
 
     std::string formatted_minute = std::to_string(processed_lesson.minute).length()<2 ? ("0" + std::to_string(processed_lesson.minute)) : std::to_string(processed_lesson.minute);
@@ -161,14 +185,21 @@ app_ui(html::context ctx)
     auto new_name = get_state(ctx, std::string());
     auto new_hour = get_state(ctx, empty<int>());
     auto new_minute = get_state(ctx, empty<int>());
-    //TODO: states
-    //TODO: read
+    auto timetable = get_local_state(ctx, "timetable");
+    //TODO: READ
+    if(!timetable.read().empty()){
+        nlohmann::json j2 = nlohmann::json::parse(timetable.read());
+        lessons = j2.get<std::map<std::string, std::vector<Lesson>>>();
+    }
 
     auto add_lesson = alia::callback(
     [&](int n_key, std::string n_name, int n_hour, int n_minute, std::string day_of_the_week) {
         lessons[day_of_the_week].push_back(Lesson(n_key, n_name, n_hour, n_minute)); 
         std::sort(lessons[day_of_the_week].begin(), lessons[day_of_the_week].end(), lesson_by_key_less_operator);
-        //TODO: SAVE
+        std::stringstream ss;
+        nlohmann::json j = lessons;
+        ss << std::setw(4) << j;
+        timetable.write(ss.str());
     });
 
     document_title(ctx, TIMETABLE);
@@ -184,7 +215,7 @@ app_ui(html::context ctx)
         html::text(ctx, " " + active_weekday);
         alia::for_each(ctx, lessons[active_weekday.read()],
         [&](auto each_lesson) {
-            present_lesson(ctx, each_lesson, active_weekday.read());
+            present_lesson(ctx, each_lesson, active_weekday.read(), timetable);
         });
 
         html::p(ctx, "\n");
@@ -214,7 +245,7 @@ app_ui(html::context ctx)
                 new_key <<= 0,
                 new_name <<= "",
                 new_hour <<= 0,
-                new_minute <<= -1,
+                new_minute <<= 0,
                 new_weekday <<= MONDAY
             )
         );
