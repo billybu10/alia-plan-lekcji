@@ -4,7 +4,7 @@ Timetable in C++ written in [alia](alia.dev)
 
 ## Disclaimer
 
-This project is written as my first attempt at writing in alia, and focuses mostly on it. If you (for some reason) want to use my project, it will need some modifications(especially adding some way of saving data and css, it's awful, because i just didn't care).
+This project is written as my first attempt at writing in alia, and focuses mostly on it. I didn't write it in the most optimized way. If you (for some reason) want to use my project, it will need some modifications(css, it's awful, because i just didn't care).
 
 ## How to build
 
