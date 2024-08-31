@@ -10,7 +10,6 @@
 #include <chrono>
 #include <ctime>
 #include <cmath>
-#include <ranges>
 
 #define MONDAY "Monday"
 #define TUESDAY "Tuesday"
